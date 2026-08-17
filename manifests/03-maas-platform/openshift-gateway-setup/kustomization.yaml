@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Only metallb-config.yaml is a static resource.
+# gateway.yaml.tmpl and route.yaml.tmpl require envsubst before applying
+# (they contain ${CLUSTER_DOMAIN} and ${CERT_NAME} placeholders).
+resources:
+  - metallb-config.yaml

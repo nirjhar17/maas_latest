@@ -1,0 +1,29 @@
+# To remove all gateway resources: oc delete -f manifests/04-maas-platform/openshift-gateway-setup/cleanup.yaml
+
+# Remove Route
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: maas-default-gateway-https
+  namespace: openshift-ingress
+---
+# Remove Gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: maas-default-gateway
+  namespace: openshift-ingress
+---
+# Remove MetalLB L2 Advertisement
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: maas-advertisement
+  namespace: metallb-system
+---
+# Remove MetalLB IP Pool
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: maas-pool
+  namespace: metallb-system

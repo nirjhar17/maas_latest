@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How RHOAI Models-as-a-Service Works</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --accent: #ee0000;
+      --accent-dark: #b30000;
+      --text: #1a1a1a;
+      --subtle: #555;
+      --bg: #ffffff;
+      --code-bg: #f5f5f5;
+      --border: #ddd;
+      --toc-bg: #fafafa;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Red Hat Text", "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 2rem; color: var(--accent); border-bottom: 3px solid var(--accent); padding-bottom: 0.4rem; margin-bottom: 1.2rem; }
+    h2 { font-size: 1.35rem; color: var(--accent-dark); margin-top: 2.5rem; margin-bottom: 0.8rem; border-left: 4px solid var(--accent); padding-left: 0.6rem; }
+    h3 { font-size: 1.05rem; color: var(--text); margin-top: 1.6rem; margin-bottom: 0.5rem; font-weight: 600; }
+    p { margin-bottom: 0.9rem; }
+    ul, ol { padding-left: 1.4rem; margin-bottom: 0.9rem; }
+    li { margin-bottom: 0.35rem; }
+    code {
+      font-family: "Red Hat Mono", "Consolas", "Monaco", monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0.1em 0.35em;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+    pre code { border: none; padding: 0; background: none; font-size: 0.87em; }
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #fff5f5;
+      padding: 0.7rem 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 4px 4px 0;
+    }
+    .callout.note {
+      border-color: #0066cc;
+      background: #f0f6ff;
+    }
+    .callout.warn {
+      border-color: #d4860a;
+      background: #fffbf0;
+    }
+    .toc {
+      background: var(--toc-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1rem 1.2rem;
+      margin-bottom: 2rem;
+    }
+    .toc h2 { margin-top: 0; font-size: 1rem; border: none; padding-left: 0; color: var(--text); }
+    .toc ol { margin-bottom: 0; }
+    .toc a { color: var(--accent-dark); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+    .component-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .component-card {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.8rem 1rem;
+    }
+    .component-card h3 { margin-top: 0; font-size: 0.95rem; color: var(--accent-dark); }
+    .component-card p { font-size: 0.88em; color: var(--subtle); margin-bottom: 0; }
+    .mermaid { margin: 1.2rem 0; text-align: center; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; font-size: 0.9em; }
+    th { background: var(--code-bg); text-align: left; padding: 0.5rem 0.7rem; border: 1px solid var(--border); }
+    td { padding: 0.45rem 0.7rem; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--toc-bg); }
+    a { color: var(--accent-dark); }
+    .badge {
+      display: inline-block;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.1em 0.55em;
+      font-size: 0.82em;
+      color: var(--subtle);
+      margin-left: 0.3em;
+    }
+    .badge.optional { background: #fffbf0; border-color: #d4860a; color: #8a5000; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  </style>
+</head>
+<body>
+
+<h1>How RHOAI Models-as-a-Service Works</h1>
+
+<p>A deep-dive for platform engineers: what every component does, how they wire together, and the full journey from an API call to a model response.</p>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#problem">What Problem It Is Solving</a></li>
+    <li><a href="#stack">The Stack at a Glance</a></li>
+    <li><a href="#components">Component Map</a></li>
+    <li><a href="#request-flow">Request Flow: Step by Step</a></li>
+    <li><a href="#tls-setup">How Authorino TLS Gets Bootstrapped</a></li>
+    <li><a href="#gateway-detail">Gateway Deep Dive</a></li>
+    <li><a href="#kuadrant-detail">Kuadrant, Authorino, Limitador, and WASM</a></li>
+    <li><a href="#postgres">PostgreSQL and the Two Secrets</a></li>
+    <li><a href="#rhoai-crds">RHOAI CRDs: DSCI, DSC, and MaaS Objects</a></li>
+    <li><a href="#model-serving">Model Serving: Simulator vs GPU</a></li>
+    <li><a href="#gotchas">Field Gotchas</a></li>
+    <li><a href="#optional">What Is Optional</a></li>
+  </ol>
+</nav>
+
+<!-- ===== SECTION 1 ===== -->
+<h2 id="problem">What Problem It Is Solving</h2>
+
+<p>When a platform team wants to expose LLMs to many internal users or teams, the raw model endpoint — a vLLM pod inside Kubernetes — is not enough. It has no authentication, no rate limiting, no per-user quotas, no API-key lifecycle management, and no billing hooks. Every consumer would have unrestricted access and could saturate the GPU in seconds.</p>
+
+<p>Models-as-a-Service (MaaS) is the "front door" layer that sits between your users and your models. It turns the raw inference endpoint into a governed API: users get <code>sk-oai-*</code> API keys, each key is bound to a subscription that carries rate limits, access to specific models is controlled by auth policies, and all of this is enforced before a single token reaches the GPU.</p>
+
+<p>In one sentence: <strong>MaaS is an API-key and subscription management plane that enforces auth and quotas at the Gateway edge, so your LLM pods only see requests that have already been authenticated and rate-checked.</strong></p>
+
+<p>The inference engine itself (vLLM via the llm-d stack) is separate. MaaS does not care how inference works internally; it only cares that the request is authorised and within budget before it arrives.</p>
+
+<!-- ===== SECTION 2 ===== -->
+<h2 id="stack">The Stack at a Glance</h2>
+
+<p>The full stack has four layers, each with a clear responsibility boundary.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Components</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Entry / Gateway</strong></td><td>OpenShift Ingress Operator, istiod, Envoy (istio-proxy), Gateway API</td><td>Accepts TLS connections, terminates the router cert, routes to the correct backend via HTTPRoutes</td></tr>
+    <tr><td><strong>Policy</strong></td><td>Kuadrant (RHCL), Authorino, Limitador, WASM plugin</td><td>Validates API keys, checks subscription access, enforces token-rate limits — all in the Envoy filter chain before the request moves on</td></tr>
+    <tr><td><strong>Token Management</strong></td><td>maas-api, PostgreSQL</td><td>Mints, validates, and revokes <code>sk-oai-*</code> keys; stores hashed keys + subscription bindings in Postgres</td></tr>
+    <tr><td><strong>Inference</strong></td><td>LLMInferenceService, vLLM / llm-d-inference-sim</td><td>Actually runs the model; receives only pre-authorised requests</td></tr>
+  </tbody>
+</table>
+
+<p>Two additional layers support the stack without being in the request path: <strong>cert-manager</strong> (TLS lifecycle) and <strong>Leader Worker Set</strong> (coordinates multi-replica inference workloads). The OpenShift service-ca operator is used instead of cert-manager for the Gateway-to-Authorino TLS hop.</p>
+
+<!-- ===== SECTION 3 ===== -->
+<h2 id="components">Component Map</h2>
+
+<div class="component-grid">
+
+  <div class="component-card">
+    <h3>OpenShift Ingress Operator</h3>
+    <p>Manages the HAProxy-based default router (<code>*.apps</code> Routes) and the <code>openshift-ingress</code> namespace. MaaS does not use HAProxy for serving; instead, the MaaS Gateway lives <em>in</em> <code>openshift-ingress</code> as a separate LoadBalancer Service managed by Istio. On non-cloud clusters a passthrough Route through HAProxy bridges external traffic to the Gateway's MetalLB IP.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>GatewayClass: openshift-default</h3>
+    <p>The Gateway API <code>GatewayClass</code> tells OpenShift which controller manages Gateways with this class. The controller is <code>openshift.io/gateway-controller/v1</code> — this is the OpenShift-native Istio-based Gateway controller, <em>not</em> HAProxy and not the Envoy Gateway project. When a <code>Gateway</code> resource referencing this class is created, the controller provisions an Envoy (istio-proxy) Deployment and a matching LoadBalancer Service.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>Gateway: maas-default-gateway</h3>
+    <p>The actual entry point. Lives in <code>openshift-ingress</code>. Has two listeners: HTTP on port 80 (redirect) and HTTPS on port 443 (TLS terminate with the cluster router cert). HTTPRoutes in namespaces labelled <code>maas.opendatahub.io/gateway-access=true</code> attach to this Gateway. The annotation <code>opendatahub.io/managed=false</code> tells OpenDataHub not to take ownership.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>istiod / Envoy (istio-proxy)</h3>
+    <p>istiod is the Istio control plane bundled with RHOAI. It programs the Envoy sidecar proxies and the Gateway's Envoy proxy. The Gateway pod is literally an <code>istio-proxy</code> container. Kuadrant's WASM plugin is loaded into this Envoy at startup, which is why the default <code>1Gi</code> memory limit is insufficient.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>Kuadrant (RHCL)</h3>
+    <p>Red Hat Connectivity Link. The umbrella operator that installs and wires together Authorino and Limitador. The <code>Kuadrant</code> CR triggers this reconciliation. Kuadrant exposes higher-level policy CRDs (<code>MaaSAuthPolicy</code>, <code>MaaSSubscription</code>) that translate into Authorino and Limitador rules. The policy layer is attached to the Gateway via <code>targetRef</code> pointing at the Gateway or HTTPRoutes.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>Authorino</h3>
+    <p>The authentication and authorisation component within Kuadrant. Runs as a gRPC server in <code>kuadrant-system</code>. The Gateway's Envoy calls Authorino over TLS for every request, passing the <code>Authorization: Bearer &lt;key&gt;</code> header. Authorino calls maas-api's <code>/internal/v1/api-keys/validate</code> endpoint to resolve the key to a user identity and subscription.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>Limitador</h3>
+    <p>The rate-limiting component. Also runs in <code>kuadrant-system</code>. After Authorino succeeds, Envoy checks Limitador against the token-rate limits defined in <code>MaaSSubscription</code>. Limitador uses in-memory counters (or Redis in production) and replies with allow or deny. A <code>429 Too Many Requests</code> response is sent to the client if limits are exceeded.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>WASM Plugin</h3>
+    <p>A WebAssembly module loaded by Kuadrant into the Gateway's Envoy proxy at startup. It is the glue that intercepts the request inside Envoy and calls out to Authorino and Limitador as external filter services. This is why deploying the first model triggers a Gateway pod restart — Envoy reloads the WASM module. It is also why the pod needs 2 Gi of memory.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>cert-manager vs service-ca</h3>
+    <p>Two separate TLS issuers are at work. The OpenShift <strong>service-ca</strong> operator generates the <code>authorino-server-cert</code> TLS secret by annotating the Authorino Service with <code>service.beta.openshift.io/serving-cert-secret-name</code>. cert-manager is installed but is used for other purposes (e.g., serving certs on the model endpoints or external ingress). Do not substitute one for the other in the Authorino bootstrap step.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>maas-api</h3>
+    <p>A REST API deployed in <code>redhat-ods-applications</code> by the RHOAI operator when <code>modelsAsService: Managed</code> is set in the DSC. It handles key creation, validation, revocation, and subscription resolution. Authorino calls it on every inference request to validate the <code>sk-oai-*</code> key. It reads/writes to PostgreSQL.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>PostgreSQL</h3>
+    <p>A plain Deployment (not CloudNativePG) running PostgreSQL 16 in <code>redhat-ods-applications</code>. Connection uses <code>sslmode=disable</code> — plain TCP within the cluster. Stores hashed API keys, subscription bindings, and expiry metadata. The maas-api is the only consumer.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>DSCI and DSC</h3>
+    <p><code>DSCInitialization</code> (DSCI) is a cluster-scoped resource that sets global RHOAI config: the applications namespace, monitoring mode (<code>Managed</code>), and CA bundle trust. <code>DataScienceCluster</code> (DSC) enables individual components. Setting <code>kserve.serving.managementState: Managed</code> and <code>modelsAsService: {managementState: Managed}</code> in the DSC is what triggers the RHOAI operator to deploy maas-api and maas-controller.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>LLMInferenceService</h3>
+    <p>A CRD introduced by the MaaS/llm-d stack. Similar to KServe's <code>InferenceService</code> but extended with MaaS-specific fields. Each model gets one <code>LLMInferenceService</code> in the <code>llm</code> namespace. The RHOAI operator reconciles it into a Deployment backed by vLLM (or the simulator container) and creates the corresponding HTTPRoute on the Gateway.</p>
+  </div>
+
+  <div class="component-card">
+    <h3>Leader Worker Set (LWS)</h3>
+    <p>An operator that coordinates multi-pod workloads where all pods must start together (leader + workers). Used for distributed inference across multiple GPUs or nodes. Not exercised by the single-GPU models in this guide but is installed as a prerequisite because the LLMInferenceService CRD depends on it.</p>
+  </div>
+
+</div>
+
+<!-- ===== SECTION 4 ===== -->
+<h2 id="request-flow">Request Flow: Step by Step</h2>
+
+<p>Here is the journey of a single inference request from a client laptop to the model and back. The same path applies whether the model is the simulator or a real GPU-backed vLLM pod.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Router as OpenShift Router<br/>(HAProxy, non-cloud only)
+    participant GW as Gateway maas-default-gateway<br/>(Envoy / istio-proxy)
+    participant WASM as WASM Plugin<br/>(in Envoy filter chain)
+    participant Authorino
+    participant MaaSAPI as maas-api<br/>/internal/v1/api-keys/validate
+    participant Postgres
+    participant Limitador
+    participant HTTPRoute
+    participant LLM as LLMInferenceService<br/>(vLLM / simulator)
+
+    Client->>Router: HTTPS POST /v1/chat/completions<br/>Authorization: Bearer sk-oai-...
+    Note over Router: Non-cloud only.<br/>Cloud clients hit GW directly.
+    Router->>GW: TLS passthrough (port 443)
+    GW->>GW: Terminate TLS with router-certs-default<br/>Match HTTPRoute listener
+    GW->>WASM: Invoke Kuadrant ext-authz filter
+    WASM->>Authorino: gRPC CheckRequest (over TLS, authorino-server-cert)
+    Authorino->>MaaSAPI: POST /internal/v1/api-keys/validate {key}
+    MaaSAPI->>Postgres: SELECT WHERE key_hash = SHA256(sk-oai-...)
+    Postgres-->>MaaSAPI: {userId, groups, subscriptionName, expiry}
+    MaaSAPI-->>Authorino: 200 {valid: true, userId, subscriptionName}
+    Authorino->>MaaSAPI: POST /internal/v1/subscriptions/select {subscriptionName, userId}
+    MaaSAPI-->>Authorino: 200 {selected subscription, rate-limit headers}
+    Authorino-->>WASM: OK + metadata (userId, subscription, limits)
+    WASM->>Limitador: RateLimit check (tokens/min for subscription)
+    Limitador-->>WASM: ALLOWED
+    WASM-->>GW: Auth passed, add upstream headers
+    GW->>HTTPRoute: Route to backend by model path
+    HTTPRoute->>LLM: Forward request (with identity headers injected)
+    LLM-->>Client: 200 {"choices": [...]}
+
+    Note over Authorino,WASM: If key missing/expired → 401
+    Note over Authorino,WASM: If subscription mismatch → 403
+    Note over WASM,Limitador: If quota exceeded → 429
+</div>
+
+<p>A few things to note about this flow. First, Authorino does <em>not</em> cache the key lookup between requests in the default configuration — it calls maas-api on every single request. This is intentional: it ensures that revoked keys stop working immediately without any cache TTL delay.</p>
+
+<p>Second, the rate-limit check by Limitador happens <em>after</em> Authorino has already validated the key. This ordering matters: you only count quota for requests that are genuinely authenticated. An attacker spamming invalid keys does not consume your quota budget.</p>
+
+<p>Third, on cloud clusters (AWS, Azure, GCP) the OpenShift router is not in the path at all. The Gateway's LoadBalancer Service gets a cloud ELB/ALB IP, and the client connects directly. On baremetal or OpenStack, MetalLB assigns an IP, but it is only routable within the cluster network; an HAProxy passthrough Route bridges the external DNS to the MetalLB IP.</p>
+
+<!-- ===== SECTION 5 ===== -->
+<h2 id="tls-setup">How Authorino TLS Gets Bootstrapped</h2>
+
+<p>There are two distinct TLS hops in the stack, and they use different certificate sources. It is worth understanding both because misconfiguring either one causes the Gateway to fail auth checks.</p>
+
+<p>The first hop is from the client to the Gateway. The Gateway listener terminates TLS using the cluster's default router certificate, which is stored in the secret named by <code>CERT_NAME</code> (usually <code>router-certs-default</code>) in <code>openshift-ingress</code>. This is the same certificate that <code>*.apps.&lt;cluster&gt;</code> Routes use, so the client trusts it via the cluster's standard CA chain.</p>
+
+<p>The second hop is from the Gateway's Envoy proxy to Authorino. Envoy needs to call Authorino's gRPC port over TLS because the call carries authentication data and flows over the cluster network. A different certificate is needed here: <code>authorino-server-cert</code> in <code>kuadrant-system</code>. This certificate is issued by OpenShift's internal <strong>service-ca</strong> operator, not by cert-manager, and not by an external CA.</p>
+
+<p>The bootstrap sequence for this second hop is shown below. Understanding the sequence explains why the steps in Phase 2 must happen in a specific order.</p>
+
+<div class="mermaid">
+sequenceDiagram
+    participant Admin
+    participant ServiceCA as OpenShift service-ca operator
+    participant AuthorinoSvc as Service/authorino<br/>(kuadrant-system)
+    participant KuadrantOp as Kuadrant Operator
+    participant AuthorinoSecret as Secret/authorino-server-cert
+    participant AuthorinoDeployment as Deployment/authorino
+    participant GW as Gateway (Envoy)
+
+    Admin->>AuthorinoSvc: oc apply -f service-annotation.yaml<br/>(annotate Service with serving-cert-secret-name)
+    ServiceCA->>AuthorinoSecret: Auto-generate TLS Secret<br/>signed by service-ca bundle
+    Admin->>KuadrantOp: oc apply -f kuadrant.yaml
+    KuadrantOp->>AuthorinoDeployment: Auto-create Authorino CR + Deployment
+    Admin->>AuthorinoDeployment: oc patch authorino → enable TLS listener<br/>(certSecretRef: authorino-server-cert)
+    Admin->>AuthorinoDeployment: oc set env → SSL_CERT_FILE + REQUESTS_CA_BUNDLE<br/>(service-ca bundle path)
+    Admin->>GW: oc annotate gateway → authorino-tls-bootstrap=true
+    Note over GW,AuthorinoDeployment: Gateway reads service-ca bundle from<br/>mounted ConfigMap and calls Authorino over TLS
+</div>
+
+<p>The annotation on the Gateway (<code>security.opendatahub.io/authorino-tls-bootstrap=true</code>) signals the MaaS controller to wire the Gateway's Envoy to use the service-ca trust bundle when verifying Authorino's certificate. Without this annotation, Envoy falls back to the system trust store and rejects the service-ca-issued cert, causing every auth call to return a 500 upstream error.</p>
+
+<p>One common trap: if you apply the Kuadrant CR before annotating the Authorino Service, the <code>authorino-server-cert</code> Secret may not exist yet when Kuadrant creates the Authorino deployment. The TLS listener will start without a cert and silently fall back to plaintext. Always apply the service annotation <em>before</em> the Kuadrant CR.</p>
+
+<!-- ===== SECTION 6 ===== -->
+<h2 id="gateway-detail">Gateway Deep Dive</h2>
+
+<p>The <code>Gateway</code> resource is deceptively simple-looking — it is about 30 lines of YAML. But several of its fields have non-obvious behaviour that is important to get right.</p>
+
+<h3>opendatahub.io/managed: false</h3>
+
+<p>OpenDataHub's operator continuously reconciles resources it "owns." If the Gateway did not carry this annotation, the ODH operator would periodically overwrite your Gateway spec to match its own desired state, including resetting the <code>parametersRef</code> that sets the 2 Gi memory limit. The <code>managed: false</code> annotation tells ODH: "I created this; leave it alone." This is the same pattern used for other resources you want to manage yourself outside the ODH lifecycle.</p>
+
+<h3>parametersRef → ConfigMap maas-gateway-options</h3>
+
+<p>The Gateway API spec has no first-class field for setting resource requests on the generated Envoy Deployment. The Istio Gateway controller supports an extension mechanism: if <code>spec.infrastructure.parametersRef</code> points to a ConfigMap in the same namespace, the controller merges the ConfigMap's <code>deployment</code> key (parsed as a partial Deployment spec) into the generated Deployment. This is how the <code>2Gi</code> memory limit gets set and, critically, how it <em>survives</em> Istio reconciliation. A direct <code>oc patch deployment</code> on the Gateway's backing Deployment would be overwritten on the next reconcile cycle.</p>
+
+<h3>Namespace selector: maas.opendatahub.io/gateway-access=true</h3>
+
+<p>The Gateway's listeners use <code>allowedRoutes.namespaces.from: Selector</code> with a label selector. Any HTTPRoute in a namespace that lacks this label will be silently rejected by the Gateway controller — the route will show a <code>NotAllowedByListeners</code> status condition and the model will return a 404. Remember to label every namespace that deploys models, including the <code>llm</code> namespace and the <code>redhat-ods-applications</code> namespace where the maas-api route lives.</p>
+
+<h3>Two TLS listeners, one cert</h3>
+
+<p>The Gateway defines an HTTP listener on port 80 and an HTTPS listener on port 443. The HTTPS listener references the router cert secret (<code>${CERT_NAME}</code>). The HTTP listener exists to handle redirects but does not serve inference traffic. Both listeners restrict allowed routes to the namespace selector above.</p>
+
+<!-- ===== SECTION 7 ===== -->
+<h2 id="kuadrant-detail">Kuadrant, Authorino, Limitador, and WASM</h2>
+
+<p>Kuadrant is the name of the upstream project; Red Hat Connectivity Link (RHCL) is its product name in the Red Hat ecosystem. When you install the <code>rhcl-operator</code>, you get the Kuadrant operator. When you apply the <code>Kuadrant</code> CR, the operator bootstraps Authorino and Limitador in <code>kuadrant-system</code>.</p>
+
+<p>The important conceptual point is that Authorino and Limitador do not run "in front of" the Gateway in a traditional proxy-chain sense. They run <em>alongside</em> the Gateway's Envoy, as external services called by the WASM plugin embedded in Envoy's filter chain. The WASM plugin is Kuadrant's mechanism for injecting policy into any Envoy-based gateway without modifying Envoy itself.</p>
+
+<p>When a <code>MaaSAuthPolicy</code> is applied, the Kuadrant operator translates it into an Authorino <code>AuthConfig</code> resource. This tells Authorino which requests to intercept and what to do with them. When a <code>MaaSSubscription</code> is applied, it translates into a Limitador <code>RateLimit</code> resource.</p>
+
+<p>The WASM plugin itself is compiled Rust code, deployed as a <code>.wasm</code> binary embedded in the Kuadrant operator image and pushed into Envoy at startup via the <code>WasmPlugin</code> Istio extension. This is what causes the Envoy memory pressure: the WASM module needs to be JIT-compiled in the Envoy process, which takes additional heap. The first model deployment triggers this load if Kuadrant has not already programmed the plugin.</p>
+
+<h3>Subscription tiers and the targetRef pattern</h3>
+
+<p>Each <code>MaaSSubscription</code> has a <code>targetRef</code> pointing at the Gateway. This is the Kuadrant policy attachment model, borrowed from the Gateway API Policy Attachment spec. The subscription lives in the <code>models-as-a-service</code> namespace and attaches to the Gateway in <code>openshift-ingress</code> by name. Similarly, the <code>MaaSAuthPolicy</code> attaches to the Gateway and tells Authorino which <code>AuthConfig</code> to apply for that Gateway's routes.</p>
+
+<p>The two built-in tiers for each model are <em>free</em> (100 tokens/min, priority 10) and <em>premium</em> (100,000 tokens/min, priority 20). Higher priority wins when a key is bound to multiple subscriptions. These values are intentionally low for lab defaults — production deployments should adjust them in the <code>MaaSSubscription</code> YAML before applying.</p>
+
+<!-- ===== SECTION 8 ===== -->
+<h2 id="postgres">PostgreSQL and the Two Secrets</h2>
+
+<p>The PostgreSQL setup is deliberately simple: a plain <code>Deployment</code> (not CNPG, not an Operator-managed cluster) running a single replica of the RHEL-9-based PostgreSQL 16 image, backed by a 20 Gi PVC. The design decision is that MaaS needs a reliable datastore for key metadata, not a highly-available production database; the RHOAI operator manages the deployment lifecycle.</p>
+
+<p>There are exactly two secrets, and confusing them is a common source of crashes:</p>
+
+<ul>
+  <li><code>postgres-creds</code> — consumed by the <em>PostgreSQL pod itself</em> via environment variables (<code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code>, <code>POSTGRES_DB</code>). This secret tells the PostgreSQL process what user and database to create on first boot.</li>
+  <li><code>maas-db-config</code> — consumed by the <em>maas-api pod</em> via a single environment variable (<code>DB_CONNECTION_URL</code>). The URL contains the same password and uses <code>sslmode=disable</code> because the connection is pod-to-pod within the same namespace.</li>
+</ul>
+
+<p>Both secrets must exist in the <code>redhat-ods-applications</code> namespace <em>before</em> the <code>DataScienceCluster</code> is applied. If maas-api starts before <code>maas-db-config</code> exists, the pod enters CrashLoopBackOff and you must delete the pod to trigger a fresh start after the secret is created.</p>
+
+<p>Both secrets are created imperatively with <code>oc create secret generic</code> and should never be committed to git. The connection URL uses a randomly generated password produced at deploy time with <code>openssl rand</code>.</p>
+
+<!-- ===== SECTION 9 ===== -->
+<h2 id="rhoai-crds">RHOAI CRDs: DSCI, DSC, and MaaS Objects</h2>
+
+<p>The RHOAI operator has a two-tier configuration model. The <code>DSCInitialization</code> (DSCI) is applied first and sets cluster-wide concerns: which namespace to use for applications (<code>redhat-ods-applications</code>), whether the operator should manage the monitoring stack, and what trusted CA bundles to inject. There is only one DSCI per cluster.</p>
+
+<p>The <code>DataScienceCluster</code> (DSC) comes second and controls which components are enabled. The key fields for MaaS are:</p>
+
+<pre><code>spec:
+  components:
+    kserve:
+      serving:
+        managementState: Managed   # enable model serving
+      modelsAsService:
+        managementState: Managed   # enable MaaS — deploys maas-api + maas-controller
+</code></pre>
+
+<p>Once the DSC is applied with these settings, the RHOAI operator creates the <code>models-as-a-service</code> namespace, deploys <code>maas-api</code> and <code>maas-controller</code> in <code>redhat-ods-applications</code>, installs the MaaS CRDs, and creates the <code>default-tenant</code> CR. This is why Phase 3 (PostgreSQL) must come before Phase 4 (DSC): maas-api will crash immediately if it cannot connect to the database.</p>
+
+<h3>MaaSModelRef</h3>
+
+<p>After an <code>LLMInferenceService</code> is deployed, a <code>MaaSModelRef</code> in the same namespace registers it with the MaaS control plane. The maas-api reads all <code>MaaSModelRef</code> objects across namespaces to build its model catalogue. When a client calls <code>GET /v1/models</code>, the response comes from this catalogue.</p>
+
+<h3>MaaSAuthPolicy and MaaSSubscription</h3>
+
+<p>Both live in the <code>models-as-a-service</code> namespace. <code>MaaSAuthPolicy</code> defines who can access the model — in the default manifests it allows <code>system:authenticated</code>, meaning any user with a valid OpenShift identity. <code>MaaSSubscription</code> defines the rate limit tiers and binds them to the Gateway. Together they are what Authorino and Limitador use to make per-request decisions.</p>
+
+<!-- ===== SECTION 10 ===== -->
+<h2 id="model-serving">Model Serving: Simulator vs GPU</h2>
+
+<p>The simulator uses a CPU-only container (<code>llm-d-inference-sim</code>) that accepts inference requests and returns random plausible-looking completions. It does not actually run a language model. This makes it ideal for validating the entire auth/gateway/quota stack without any GPU infrastructure. The startup time is about 30 seconds.</p>
+
+<p>GPU models use the Red Hat AI Inference Server (RHAIIS), which is a productised build of vLLM. Each model is packaged as an OCI "modelcar" image from <code>registry.redhat.io</code> — a container that contains only the model weights and is used as an init container to copy weights into a shared volume before the vLLM serving container starts. This approach avoids HuggingFace downloads in production deployments.</p>
+
+<p>GPU sizing guidance:</p>
+<ul>
+  <li>Simulator: no GPU; 100m–500m CPU, 256–512 Mi memory</li>
+  <li>Granite 4.0-h-tiny FP8: ~8 GB VRAM; any NVIDIA GPU</li>
+  <li>Gemma 2 9B IT FP8: ~12 GB VRAM; single A10G (24 GB VRAM recommended)</li>
+  <li>GPT-oss-20b: ~16 GB VRAM; A10G or L40S (AWS g6e.2xlarge has an L40S)</li>
+</ul>
+
+<p>The simulator uses <code>hf://sshleifer/tiny-gpt2</code> as its model URI, which can trigger HuggingFace's Xet protocol and cause the storage-initializer init container to hang. If the model pod is stuck in <code>Init:0/1</code> for more than 5 minutes, patch the environment variable <code>HF_HUB_DISABLE_XET=1</code> onto the Deployment to fall back to standard HTTP downloads.</p>
+
+<!-- ===== SECTION 11 ===== -->
+<h2 id="gotchas">Field Gotchas</h2>
+
+<p>These are the configuration details that are not obvious from reading the CRD specs and that have caused real deployment failures.</p>
+
+<h3>opendatahub.io/managed: false (Gateway annotation)</h3>
+
+<p>Without this annotation, the ODH operator periodically reconciles the Gateway and overwrites your custom spec, including the <code>parametersRef</code> that sets the 2 Gi memory limit. Always set this annotation when creating a Gateway you manage yourself.</p>
+
+<h3>parametersRef in Gateway spec, not in Deployment</h3>
+
+<p>The 2 Gi memory limit cannot be set by patching the Envoy Deployment directly because Istio's reconciler overwrites it. It must be set via <code>spec.infrastructure.parametersRef</code> in the <code>Gateway</code> resource pointing at a ConfigMap. The ConfigMap must be in the <code>openshift-ingress</code> namespace and contain the <code>deployment</code> key with a partial Deployment spec. This is an Istio-specific extension to the Gateway API, not part of the Gateway API standard.</p>
+
+<h3>Namespace label: maas.opendatahub.io/gateway-access=true</h3>
+
+<p>Every namespace that creates HTTPRoutes attached to the MaaS Gateway must have this label. The Gateway controller enforces this via the <code>allowedRoutes.namespaces.selector</code>. Missing this label on the <code>llm</code> namespace is the most common reason a freshly deployed model returns 404 from the Gateway.</p>
+
+<h3>Apply Kuadrant pieces separately, not with oc apply -k</h3>
+
+<p>The Kuadrant operator auto-creates an Authorino CR when it reconciles the Kuadrant resource. If you apply the full <code>kuadrant/</code> kustomization in one shot, your Authorino CR may conflict with the auto-created one, or the TLS patch may arrive before Kuadrant has finished creating the Authorino deployment. Always apply <code>namespace.yaml</code>, <code>service-annotation.yaml</code>, <code>kuadrant.yaml</code> separately, wait for Kuadrant ready, then patch Authorino.</p>
+
+<h3>Two DSCI apply stages</h3>
+
+<p>The <code>OdhDashboardConfig</code> CRD does not exist until after the RHOAI operator has reconciled the DSC and installed the CRD. Applying the full <code>04-rhoai-config/</code> kustomization in one shot will fail on the first run because <code>OdhDashboardConfig</code> is unknown. Apply DSCI first, wait for ready, apply DSC, wait for ready, then apply the dashboard config.</p>
+
+<h3>sslmode=disable in maas-db-config</h3>
+
+<p>The PostgreSQL deployment is a simple Deployment without TLS configured on the server side. The connection URL in <code>maas-db-config</code> must include <code>sslmode=disable</code>. If you use a CNPG-managed PostgreSQL cluster (as in James's scratch notes), it will have TLS enabled and the connection URL must change accordingly.</p>
+
+<!-- ===== SECTION 12 ===== -->
+<h2 id="optional">What Is Optional</h2>
+
+<p>The following capabilities are mentioned in various contexts around MaaS but are not required for the core deployment described in this repository.</p>
+
+<h3>Observability (Phase 7) <span class="badge optional">Optional</span></h3>
+
+<p>Phase 7 of the lab guide adds the Cluster Observability Operator (COO), OpenTelemetry, and Tempo for full distributed tracing and metrics dashboards in the RHOAI UI. The core MaaS functionality works without any of this. User Workload Monitoring (enabled in Phase 2) is needed if you want the <code>observabilityDashboard</code> feature flag in the dashboard, but the inference API and auth enforcement work whether or not UWM is configured.</p>
+
+<h3>CNPG TLS, custom CA, proxy user-ca-bundle <span class="badge optional">Optional</span></h3>
+
+<p>James's from-scratch notes describe an alternative approach using CloudNativePG for the PostgreSQL cluster (with TLS), a custom CA injected via the proxy user-ca-bundle mechanism, and pinning the RHCL operator version to 1.3.4. These are valid production hardening steps but are not required for the standard connected lab deployment covered here. If you follow this path, the <code>DB_CONNECTION_URL</code> in <code>maas-db-config</code> needs TLS parameters, and you must add the custom CA to the DSCI trusted bundle.</p>
+
+<h3>COO installed early <span class="badge optional">Optional</span></h3>
+
+<p>James's notes also mention installing the Cluster Observability Operator in Phase 1 rather than Phase 7. This is safe — installing COO early does not affect any other component — but it adds operator CSV wait time in Phase 1 for no immediate benefit unless you are also configuring observability in Phase 7.</p>
+
+<h3>External Models <span class="badge optional">Optional</span></h3>
+
+<p>The <code>ExternalModel</code> CRD allows MaaS to proxy requests to third-party APIs (Anthropic Claude, OpenAI, Gemini). External models are registered with an <code>ExternalModel</code> CR instead of an <code>LLMInferenceService</code> and appear in the same model catalogue. This feature is covered in the lab's Phase 8 and requires API keys for the external provider to be stored as Secrets.</p>
+
+<h3>MetalLB <span class="badge optional">Optional</span></h3>
+
+<p>On AWS, Azure, GCP, or any cloud platform where <code>oc get infrastructure cluster -o jsonpath='{.status.platform}'</code> returns a cloud name, the LoadBalancer Service for the Gateway automatically gets an external IP from the cloud provider. MetalLB is only needed on baremetal, OpenStack, RHPDS, or SNO clusters where no cloud load-balancer controller exists.</p>
+
+<h3>GPU Operators <span class="badge optional">Optional</span></h3>
+
+<p>Node Feature Discovery and the NVIDIA GPU Operator are only needed if you plan to run real GPU models (granite-tiny-gpu, gemma, gpt-oss-20b). The simulator runs entirely on CPU and does not need any GPU infrastructure. Install the GPU operators only after the core MaaS stack is verified to be working.</p>
+
+<hr />
+
+<p>For the deploy steps that correspond to this architecture, see the <a href="../README.md">README</a>. For official product documentation, see the <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index">RHOAI 3.4 MaaS Docs</a>.</p>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', fontFamily: '"Red Hat Text", system-ui, sans-serif' });
+</script>
+
+</body>
+</html>

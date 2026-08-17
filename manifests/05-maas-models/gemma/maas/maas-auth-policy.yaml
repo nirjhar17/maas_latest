@@ -1,0 +1,16 @@
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: MaaSAuthPolicy
+metadata:
+  name: gemma-access
+  namespace: models-as-a-service
+  annotations:
+    openshift.io/display-name: "Gemma Access"
+    openshift.io/description: "Grants all authenticated users access to Gemma 2 9B IT"
+spec:
+  modelRefs:
+    - name: gemma-2-9b-it
+      namespace: llm
+  subjects:
+    groups:
+      - name: system:authenticated
+    users: []

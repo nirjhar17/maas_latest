@@ -1,0 +1,17 @@
+apiVersion: dscinitialization.opendatahub.io/v2
+kind: DSCInitialization
+metadata:
+  name: default-dsci
+spec:
+  applicationsNamespace: redhat-ods-applications
+  # Monitoring is Managed so the RHOAI operator owns its monitoring CRs.
+  # The metrics/traces config is intentionally omitted here because populating
+  # it triggers the operator's observability cascade (MonitoringStack,
+  # ThanosQuerier, Perses, tracing) which requires Tempo, OpenTelemetry, and
+  # COO operators to be installed first. Phase 7 installs those operators and
+  # then patches this DSCI to add the metrics/traces config.
+  monitoring:
+    managementState: Managed
+  trustedCABundle:
+    customCABundle: ""
+    managementState: Managed

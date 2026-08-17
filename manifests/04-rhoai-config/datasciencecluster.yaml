@@ -1,0 +1,60 @@
+kind: DataScienceCluster
+apiVersion: datasciencecluster.opendatahub.io/v2
+metadata:
+  name: default-dsc
+  labels:
+    app.kubernetes.io/name: datasciencecluster
+spec:
+  components:
+    # -- AI Pipelines (Kubeflow Pipelines) --
+    aipipelines:
+      managementState: Managed
+    # -- RHOAI Dashboard --
+    dashboard:
+      managementState: Managed
+    # -- Feast Operator (feature store) --
+    feastoperator:
+      managementState: Managed
+    # -- KServe (model serving) + MaaS --
+    kserve:
+      managementState: Managed
+      modelsAsService:
+        managementState: Managed
+      nim:
+        managementState: Managed
+      rawDeploymentServiceConfig: Headed
+    # -- Kueue (job queueing) --
+    kueue:
+      defaultClusterQueueName: default
+      defaultLocalQueueName: default
+      managementState: Removed
+    # -- LlamaStack Operator (required for GenAI Studio) --
+    llamastackoperator:
+      managementState: Managed
+    # -- MLflow Operator --
+    mlflowoperator:
+      managementState: Managed
+    # -- Model Registry --
+    modelregistry:
+      managementState: Managed
+      registriesNamespace: rhoai-model-registries
+    # -- Ray (distributed computing) --
+    ray:
+      managementState: Managed
+    # -- Trainer --
+    trainer:
+      managementState: Removed
+    # -- Training Operator --
+    trainingoperator:
+      managementState: Managed
+    # -- TrustyAI (evaluation) --
+    trustyai:
+      eval:
+        lmeval:
+          permitCodeExecution: deny
+          permitOnline: deny
+      managementState: Managed
+    # -- Workbenches (Jupyter notebooks) --
+    workbenches:
+      managementState: Managed
+      workbenchNamespace: rhods-notebooks
