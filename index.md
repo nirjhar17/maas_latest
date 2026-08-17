@@ -12,6 +12,7 @@ Deploy API-key-governed LLM access on OpenShift AI 3.4 with Kuadrant auth, rate-
 - [Deploy steps (README on GitHub)](https://github.com/nirjhar17/maas_latest#steps)
 - [RHOAI 3.4 MaaS official docs](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index)
 - [Companion lab guide](https://rh-aiservices-bu.github.io/rhoai-maas-guide/modules/main/index.html)
+- [James Harmison from-scratch install](https://github.com/jharmison-redhat/maas-from-scratch) (optional extras: custom CA, CNPG TLS)
 
 ## Quick start
 

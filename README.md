@@ -6,6 +6,7 @@ Documentation:
 1. [RHOAI 3.4 MaaS Official Docs](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index)
 2. [Companion lab guide](https://rh-aiservices-bu.github.io/rhoai-maas-guide/modules/main/index.html)
 3. [Architecture & how components connect](docs/how-maas-works.html)
+4. [James Harmison from-scratch install](https://github.com/jharmison-redhat/maas-from-scratch) (optional extras: custom CA, CNPG TLS)
 
 ---
 

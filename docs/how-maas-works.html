@@ -446,7 +446,7 @@ sequenceDiagram
 
 <h3>sslmode=disable in maas-db-config</h3>
 
-<p>The PostgreSQL deployment is a simple Deployment without TLS configured on the server side. The connection URL in <code>maas-db-config</code> must include <code>sslmode=disable</code>. If you use a CNPG-managed PostgreSQL cluster (as in James's scratch notes), it will have TLS enabled and the connection URL must change accordingly.</p>
+<p>The PostgreSQL deployment is a simple Deployment without TLS configured on the server side. The connection URL in <code>maas-db-config</code> must include <code>sslmode=disable</code>. If you use a CNPG-managed PostgreSQL cluster (as in <a href="https://github.com/jharmison-redhat/maas-from-scratch">James's scratch notes</a>), it will have TLS enabled and the connection URL must change accordingly.</p>
 
 <!-- ===== SECTION 12 ===== -->
 <h2 id="optional">What Is Optional</h2>
@@ -459,11 +459,11 @@ sequenceDiagram
 
 <h3>CNPG TLS, custom CA, proxy user-ca-bundle <span class="badge optional">Optional</span></h3>
 
-<p>James's from-scratch notes describe an alternative approach using CloudNativePG for the PostgreSQL cluster (with TLS), a custom CA injected via the proxy user-ca-bundle mechanism, and pinning the RHCL operator version to 1.3.4. These are valid production hardening steps but are not required for the standard connected lab deployment covered here. If you follow this path, the <code>DB_CONNECTION_URL</code> in <code>maas-db-config</code> needs TLS parameters, and you must add the custom CA to the DSCI trusted bundle.</p>
+<p><a href="https://github.com/jharmison-redhat/maas-from-scratch">James's from-scratch notes</a> describe an alternative approach using CloudNativePG for the PostgreSQL cluster (with TLS), a custom CA injected via the proxy user-ca-bundle mechanism, and pinning the RHCL operator version to 1.3.4. These are valid production hardening steps but are not required for the standard connected lab deployment covered here. If you follow this path, the <code>DB_CONNECTION_URL</code> in <code>maas-db-config</code> needs TLS parameters, and you must add the custom CA to the DSCI trusted bundle.</p>
 
 <h3>COO installed early <span class="badge optional">Optional</span></h3>
 
-<p>James's notes also mention installing the Cluster Observability Operator in Phase 1 rather than Phase 7. This is safe — installing COO early does not affect any other component — but it adds operator CSV wait time in Phase 1 for no immediate benefit unless you are also configuring observability in Phase 7.</p>
+<p><a href="https://github.com/jharmison-redhat/maas-from-scratch">James's notes</a> also mention installing the Cluster Observability Operator in Phase 1 rather than Phase 7. This is safe — installing COO early does not affect any other component — but it adds operator CSV wait time in Phase 1 for no immediate benefit unless you are also configuring observability in Phase 7.</p>
 
 <h3>External Models <span class="badge optional">Optional</span></h3>
 
