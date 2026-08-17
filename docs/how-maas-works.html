@@ -89,7 +89,23 @@
     }
     .component-card h3 { margin-top: 0; font-size: 0.95rem; color: var(--accent-dark); }
     .component-card p { font-size: 0.88em; color: var(--subtle); margin-bottom: 0; }
-    .mermaid { margin: 1.2rem 0; text-align: center; }
+    .mermaid-wrap {
+      overflow-x: auto;
+      margin: 1.2rem calc(50% - 50vw);
+      padding: 0 1rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .mermaid {
+      margin: 0;
+      text-align: center;
+      overflow-x: auto;
+      width: 100%;
+    }
+    .mermaid svg {
+      max-width: none !important;
+      height: auto !important;
+      min-width: 1400px;
+    }
     table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; font-size: 0.9em; }
     th { background: var(--code-bg); text-align: left; padding: 0.5rem 0.7rem; border: 1px solid var(--border); }
     td { padding: 0.45rem 0.7rem; border: 1px solid var(--border); vertical-align: top; }
@@ -241,26 +257,41 @@
 <!-- ===== SECTION 4 ===== -->
 <h2 id="request-flow">Request Flow: Step by Step</h2>
 
-<p>Here is the journey of a single inference request from a client laptop to the model and back. The same path applies whether the model is the simulator or a real GPU-backed vLLM pod.</p>
+<p>Here is the journey of a single inference request from a client laptop to the model and back. The same path applies whether the model is the simulator or a real GPU-backed vLLM pod. The flow is split into three hops so each diagram stays readable; scroll horizontally on smaller screens if needed.</p>
 
+<h3>Hop 1 — Ingress: client to Gateway</h3>
+
+<p>The request enters through the OpenShift router on baremetal (or directly to the Gateway LoadBalancer on cloud). The Gateway terminates TLS and hands the request to Kuadrant's WASM filter before anything reaches a model pod.</p>
+
+<div class="mermaid-wrap">
 <div class="mermaid">
 sequenceDiagram
     participant Client
     participant Router as OpenShift Router<br/>(HAProxy, non-cloud only)
     participant GW as Gateway maas-default-gateway<br/>(Envoy / istio-proxy)
     participant WASM as WASM Plugin<br/>(in Envoy filter chain)
-    participant Authorino
-    participant MaaSAPI as maas-api<br/>/internal/v1/api-keys/validate
-    participant Postgres
-    participant Limitador
-    participant HTTPRoute
-    participant LLM as LLMInferenceService<br/>(vLLM / simulator)
 
     Client->>Router: HTTPS POST /v1/chat/completions<br/>Authorization: Bearer sk-oai-...
     Note over Router: Non-cloud only.<br/>Cloud clients hit GW directly.
     Router->>GW: TLS passthrough (port 443)
     GW->>GW: Terminate TLS with router-certs-default<br/>Match HTTPRoute listener
     GW->>WASM: Invoke Kuadrant ext-authz filter
+</div>
+</div>
+
+<h3>Hop 2 — Auth and quota: WASM to Authorino to maas-api</h3>
+
+<p>Before the request is forwarded upstream, the WASM plugin pauses it and calls Authorino. Authorino validates the API key against maas-api (which looks up the hashed key in Postgres), resolves the subscription, and Limitador checks the token-rate budget. Only after all three succeed does WASM release the request.</p>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+    participant WASM as WASM Plugin
+    participant Authorino
+    participant MaaSAPI as maas-api<br/>/internal/v1/api-keys/validate
+    participant Postgres
+    participant Limitador
+
     WASM->>Authorino: gRPC CheckRequest (over TLS, authorino-server-cert)
     Authorino->>MaaSAPI: POST /internal/v1/api-keys/validate {key}
     MaaSAPI->>Postgres: SELECT WHERE key_hash = SHA256(sk-oai-...)
@@ -271,14 +302,30 @@ sequenceDiagram
     Authorino-->>WASM: OK + metadata (userId, subscription, limits)
     WASM->>Limitador: RateLimit check (tokens/min for subscription)
     Limitador-->>WASM: ALLOWED
-    WASM-->>GW: Auth passed, add upstream headers
-    GW->>HTTPRoute: Route to backend by model path
-    HTTPRoute->>LLM: Forward request (with identity headers injected)
-    LLM-->>Client: 200 {"choices": [...]}
+    WASM-->>WASM: Auth passed, add upstream headers
 
     Note over Authorino,WASM: If key missing/expired → 401
     Note over Authorino,WASM: If subscription mismatch → 403
     Note over WASM,Limitador: If quota exceeded → 429
+</div>
+</div>
+
+<h3>Hop 3 — Route to model and response</h3>
+
+<p>With auth and quota cleared, Envoy matches the HTTPRoute for the requested model path and forwards the request to the LLMInferenceService backend. Identity headers injected by Authorino travel with the request so the model pod knows who is calling.</p>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+    participant GW as Gateway (Envoy)
+    participant HTTPRoute
+    participant LLM as LLMInferenceService<br/>(vLLM / simulator)
+    participant Client
+
+    GW->>HTTPRoute: Route to backend by model path
+    HTTPRoute->>LLM: Forward request (with identity headers injected)
+    LLM-->>Client: 200 {"choices": [...]}
+</div>
 </div>
 
 <p>A few things to note about this flow. First, Authorino does <em>not</em> cache the key lookup between requests in the default configuration — it calls maas-api on every single request. This is intentional: it ensures that revoked keys stop working immediately without any cache TTL delay.</p>
@@ -298,6 +345,7 @@ sequenceDiagram
 
 <p>The bootstrap sequence for this second hop is shown below. Understanding the sequence explains why the steps in Phase 2 must happen in a specific order.</p>
 
+<div class="mermaid-wrap">
 <div class="mermaid">
 sequenceDiagram
     participant Admin
@@ -316,6 +364,7 @@ sequenceDiagram
     Admin->>AuthorinoDeployment: oc set env → SSL_CERT_FILE + REQUESTS_CA_BUNDLE<br/>(service-ca bundle path)
     Admin->>GW: oc annotate gateway → authorino-tls-bootstrap=true
     Note over GW,AuthorinoDeployment: Gateway reads service-ca bundle from<br/>mounted ConfigMap and calls Authorino over TLS
+</div>
 </div>
 
 <p>The annotation on the Gateway (<code>security.opendatahub.io/authorino-tls-bootstrap=true</code>) signals the MaaS controller to wire the Gateway's Envoy to use the service-ca trust bundle when verifying Authorino's certificate. Without this annotation, Envoy falls back to the system trust store and rejects the service-ca-issued cert, causing every auth call to return a 500 upstream error.</p>
@@ -482,7 +531,24 @@ sequenceDiagram
 <p>For the deploy steps that correspond to this architecture, see the <a href="../README.md">README</a>. For official product documentation, see the <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index">RHOAI 3.4 MaaS Docs</a>.</p>
 
 <script>
-  mermaid.initialize({ startOnLoad: true, theme: 'neutral', fontFamily: '"Red Hat Text", system-ui, sans-serif' });
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    useMaxWidth: false,
+    fontFamily: '"Red Hat Text", system-ui, sans-serif',
+    themeVariables: {
+      fontSize: '16px'
+    },
+    sequence: {
+      useMaxWidth: false,
+      actorFontSize: 15,
+      messageFontSize: 14,
+      noteFontSize: 14
+    },
+    flowchart: {
+      useMaxWidth: false
+    }
+  });
 </script>
 
 </body>
